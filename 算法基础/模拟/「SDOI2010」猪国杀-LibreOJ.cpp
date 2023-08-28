@@ -1,9 +1,13 @@
+/*
+坑点很多，列出一些：
+1. 出了某个牌以后，可能导致前面的牌又可以用了，比如装了Z，前面的K可以用
+2. 使用锦囊牌后，从使用者开始（包括使用者）逆时针判断是否有人使用J，比如MP用了N，MP可以给ZP用J帮它挡
+3. 当前出牌的猪可能会die了
+4. 所有牌用完以后，一直摸都是最后一张牌（离谱，看别人题解得到的）
+*/
 #include<iostream>
 #include<string>
-#include<map>
 #include<queue>
-#include<algorithm>
-#include<list>
 using namespace std;
 
 class Card {
@@ -76,7 +80,7 @@ public:
         usedF = false;
     }
     void removeAllCard() {
-        if(cardHead == NULL)return;
+        if (cardHead == NULL)return;
         Card* cur = cardHead;
         Card* next = NULL;
         while (cur != NULL) {
@@ -91,6 +95,7 @@ public:
     virtual bool is_K_playable() = 0;
     virtual Pig* is_F_playable() = 0;
     int hp = 4;
+    int id = 0;
     bool equip = false;
     bool dead = false;
     int attitude = 0; // 未表明0，类反1、跳反2、 跳忠3
@@ -166,7 +171,7 @@ public:
     Pig* is_F_playable() {
         Pig* p = nextPig;
         while (p != this) {
-            if (p->attitude == 3) {
+            if (p->type == "MP") {
                 return p;
             }
             p = p->nextPig;
@@ -191,7 +196,7 @@ public:
     void getCardFromHeap(Pig* p, int num) {
         for (int i = 0;i < num && cardHeap.size()>0;i++) {
             p->addCard(cardHeap.front());
-            cardHeap.pop();
+            if (cardHeap.size() > 1)cardHeap.pop();
         }
     }
     void pigDied(Pig* diedPig) {
@@ -227,7 +232,7 @@ public:
         else {
             if (isDied) {
                 numFP--;
-                if (numFP <= 0) {
+                if (numFP == 0) {
                     setGameOver();
                 }
                 else {
@@ -250,7 +255,6 @@ public:
                 p = p->nextPig;
                 continue;
             }
-            // printPlay(pig, p, card);
             if (!p->removeCard(escape)) {
                 getHurt(pig, p, 1, card);
             }
@@ -258,16 +262,10 @@ public:
             p = p->nextPig;
         }
     }
-    void printAttitude() {
-        for (Pig* p : pigs) {
-            cout << p->type << " attitude is " << p->attitude << endl;
-        }
-
-    }
 
     Pig* checkJ(Pig* from, Pig* to, bool isGood) { //from对to使用了锦囊牌，isGood献殷情, 表敌意
-        if (to->attitude == 1)return NULL;
-        Pig* p = from->nextPig;
+        if (to->attitude <= 1)return NULL;
+        Pig* p = from;
         do {
             if (p->is_J_playable(to, isGood)) {
                 return p;
@@ -283,9 +281,7 @@ public:
             p1->attitude = p2->attitude == 3 ? 3 : 2;
         }
         else {
-            if (p2->attitude != 1) {
-                p1->attitude = p2->attitude == 2 ? 3 : 2;
-            }
+            p1->attitude = p2->attitude == 2 ? 3 : 2;
         }
         // 无懈
         Pig* h = checkJ(p1, p2, isGood);
@@ -306,6 +302,10 @@ public:
         if (h != NULL && playJ(h, p2, true)) {
             return;
         }
+        if (p2->type == "ZP" && p1->type == "MP") {
+            getHurt(p1, p2, 1, "F");
+            return;
+        }
         // fight
         Pig* cur = p2;
         while (cur->removeCard("K")) {
@@ -324,27 +324,22 @@ public:
             getHurt(p1, p2, 1, "K");
         }
     }
-    void printPlay(Pig* p1, Pig* p2, string card) {
-        cout << p1->type << "(" << p1->hp << ")" << " play " << card << " to " << p2->type << "(" << p2->hp << ")" << endl;
-    }
 
     bool playCard(Pig* p, string card) {
         if (card == "K") {
             if ((!p->usedF || p->equip) && p->is_K_playable()) {
-                // printPlay(p, p->nextPig, "K");
                 playK(p, p->nextPig);
                 return true;
             }
         }
         else if (card == "P") {
             if (p->hp < MAX_HP && p->removeCard("P")) {
-                // printPlay(p, p, "P");
                 p->hp++;
+                return true;
             }
         }
         else if (card == "Z") {
             p->removeCard("Z");
-            // printPlay(p, p, "Z");
             p->equip = true;
             return true;
         }
@@ -378,7 +373,7 @@ public:
             else {
                 card = card->next;
             }
-            if (gameOver) {
+            if (p->dead || gameOver) {
                 break;
             }
         }
@@ -438,6 +433,7 @@ public:
                 pig = new FP();
                 numFP++;
             }
+            pig->id = i;
             pigs.push_back(pig);
             for (int j = 0;j < INIT_CARDS_NUM;j++) {
                 cin >> card;
@@ -467,27 +463,3 @@ int main() {
     game.run();
     return 0;
 }
-
-/*
-3 10
-MP D D F F
-ZP N N N D
-FP J J J J
-F F D D J J F F K D
-*/
-
-/*
-3 24
-MP K K K K
-ZP Z Z Z Z
-FP J J J J
-K K Z Z J J K K W Z W W K Z J J K K J J K K W W
-*/
-
-/*
-3 24
-MP K K W J
-ZP K K W J
-FP K K W J
-K K Z Z J J K K W Z W W K Z J J K K J J K K W W
-*/
